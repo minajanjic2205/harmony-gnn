@@ -21,7 +21,6 @@
 - `ReduceLROnPlateau` raspored stope učenja + gradient clipping
 - Automatsko čuvanje najboljeg checkpointa u `modeli/lstm_baseline_najbolji.pt`
 - Evaluacija: **Chord Accuracy (CA)** i **Top-3 Accuracy** na test skupu
-
 ---
 
 ## Instalacija zavisnosti
