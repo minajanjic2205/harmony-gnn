@@ -1,0 +1,68 @@
+[
+  {
+    "alfa": 0.0,
+    "beta": 1.0,
+    "chord_accuracy": 0.8968019349637194,
+    "top3_accuracy": 0.985756517065305
+  },
+  {
+    "alfa": 0.1,
+    "beta": 0.9,
+    "chord_accuracy": 0.9019080892233271,
+    "top3_accuracy": 0.9876377317925289
+  },
+  {
+    "alfa": 0.2,
+    "beta": 0.8,
+    "chord_accuracy": 0.8943832303144316,
+    "top3_accuracy": 0.9846815372211771
+  },
+  {
+    "alfa": 0.3,
+    "beta": 0.7,
+    "chord_accuracy": 0.9056705186777748,
+    "top3_accuracy": 0.9889814565976888
+  },
+  {
+    "alfa": 0.4,
+    "beta": 0.6,
+    "chord_accuracy": 0.9000268744961032,
+    "top3_accuracy": 0.987100241870465
+  },
+  {
+    "alfa": 0.5,
+    "beta": 0.5,
+    "chord_accuracy": 0.8986831496909433,
+    "top3_accuracy": 0.9879064767535609
+  },
+  {
+    "alfa": 0.6,
+    "beta": 0.4,
+    "chord_accuracy": 0.9011018543402312,
+    "top3_accuracy": 0.987100241870465
+  },
+  {
+    "alfa": 0.7,
+    "beta": 0.3,
+    "chord_accuracy": 0.8943832303144316,
+    "top3_accuracy": 0.9795753829615694
+  },
+  {
+    "alfa": 0.8,
+    "beta": 0.2,
+    "chord_accuracy": 0.8984144047299113,
+    "top3_accuracy": 0.9876377317925289
+  },
+  {
+    "alfa": 0.9,
+    "beta": 0.1,
+    "chord_accuracy": 0.9045955388336469,
+    "top3_accuracy": 0.9879064767535609
+  },
+  {
+    "alfa": 1.0,
+    "beta": 0.0,
+    "chord_accuracy": 0.8997581295350712,
+    "top3_accuracy": 0.985219027143241
+  }
+]
