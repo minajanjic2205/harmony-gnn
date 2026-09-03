@@ -55,7 +55,7 @@ PRAG_KOPOJAVE = 0.01
 
 
 GNN_HP = {
-    "skrivene_dimenzije" : 64,
+    "skrivene_dimenzije" : 128,
     "broj_gcn_slojeva"   : 2,
     "dropout_stopa"      : 0.3,
     "velicina_prozora"   : 16,
