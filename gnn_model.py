@@ -1,10 +1,9 @@
 """
-gnn_model.py — Faza 4: GNN Model za predviđanje akorda (E2 i E3)
-Autor: Mina Janjić | Predmet: Računarstvo
+gnn_model.py faza 4: GNN Model za predviđanje akorda (E2 i E3)
 Opis: Graph Convolutional Network koji koristi tonalni graf iz graf.py.
       Jednostavna, pouzdana arhitektura:
-        1. Embedding melodije → LSTM → melodijski vektor
-        2. GCN propagacija nad grafom → obogaćeni vektori akorada
+        1. Embedding melodije - LSTM - melodijski vektor
+        2. GCN propagacija nad grafom - obogaćeni vektori akorada
         3. Linearni sloj: melodijski vektor → logiti nad akordima
 """
 
@@ -81,13 +80,19 @@ def napravi_loader(pesme, mapa, mesati=True) -> DataLoader:
 
 
 
-# GCN SLOJ (rucna implementacija  pouzdanija od hetero wrappera)
-
+# GCN SLOJ (rucna implementacija — pouzdanija od hetero wrappera)
 
 class GCNSloj(nn.Module):
     """
-    Jedan sloj grafovske konvolucije.
-    Svaki čvor agregira informacije od svojih suseda i ažurira svoju reprezentaciju.
+    Jedan sloj grafovske konvolucije — SA TEŽINAMA GRANA.
+
+    Svaki čvor agregira poruke od svojih suseda, PONDERISANE težinom
+    veze (edge_attr). Jača veza (npr. w=0.85) više utiče na rezultat
+    od slabije veze (npr. w=0.10) — umesto da se sve tretiraju jednako.
+
+    Ovo je ispravka bug-a: prethodna verzija je pravila prost
+    (nesponderisan) prosek suseda i potpuno ignorisala edge_attr,
+    zbog čega parametar α iz tonalnog grafa nije imao efekta na model.
     """
     def __init__(self, ulazna_dim: int, izlazna_dim: int) -> None:
         super().__init__()
@@ -96,27 +101,33 @@ class GCNSloj(nn.Module):
 
     def forward(
         self,
-        x_izvor: torch.Tensor,   # osobine izvornih čvorova
-        x_cilj: torch.Tensor,    # osobine ciljnih čvorova
-        edge_index: torch.Tensor,  # (2, broj_grana)
+        x_izvor: torch.Tensor,      # osobine izvornih čvorova (broj_izvora, dim)
+        x_cilj: torch.Tensor,       # osobine ciljnih čvorova (broj_ciljeva, dim)
+        edge_index: torch.Tensor,   # (2, broj_grana)
+        edge_weight: torch.Tensor,  # (broj_grana, 1) — težina svake grane
     ) -> torch.Tensor:
         src, dst = edge_index[0], edge_index[1]
 
-        # Agregacija: za svaki ciljni čvor uzimamo prosek suseda
-        poruke = x_izvor[src]  # (broj_grana, dim)
+        # Poruke od izvornih čvorova, PONDERISANE težinom njihove grane.
+        # edge_weight ima oblik (broj_grana, 1) pa se automatski
+        # broadcast-uje preko svih dim kolona poruke.
+        poruke = x_izvor[src] * edge_weight  # (broj_grana, dim)
+
+        # Ponderisano sabiranje poruka po ciljnom čvoru
         agregat = torch.zeros_like(x_cilj)
         agregat.scatter_add_(0, dst.unsqueeze(1).expand_as(poruke), poruke)
 
-        # Normalizacija po broju suseda
-        broj_suseda = torch.zeros(x_cilj.shape[0], device=x_cilj.device)
-        broj_suseda.scatter_add_(0, dst, torch.ones(dst.shape[0], device=dst.device))
-        broj_suseda = broj_suseda.clamp(min=1).unsqueeze(1)
-        agregat = agregat / broj_suseda
+        # Normalizacija sa SUMOM TEŽINA (ne brojem suseda!) — ovo je
+        # ponderisani prosek: čvor sa jednim jakim susedom (w=0.9) treba
+        # da bude drugačiji od čvora sa jednim slabim susedom (w=0.1).
+        suma_tezina = torch.zeros(x_cilj.shape[0], 1, device=x_cilj.device)
+        suma_tezina.scatter_add_(0, dst.unsqueeze(1), edge_weight)
+        suma_tezina = suma_tezina.clamp(min=1e-8)  # sprečava deljenje nulom
+        agregat = agregat / suma_tezina
 
         # Konkatenacija sa sopstvenom reprezentacijom i transformacija
         kombinovano = torch.cat([x_cilj, agregat], dim=-1)
         return self.aktivacija(self.linear(kombinovano))
-
 
 
 # GNN ARHITEKTURA
@@ -167,38 +178,38 @@ class GNNPredvidjanjAkorda(nn.Module):
 
     def forward(
         self,
-        melodija: torch.Tensor,       # (serija, 16)
-        x_nota: torch.Tensor,         # (12, 12) one-hot
-        edge_index_na: torch.Tensor,  # nota→akord grane
-        edge_index_aa: torch.Tensor,  # akord↔akord grane
+        melodija: torch.Tensor,        # (serija, 16)
+        x_nota: torch.Tensor,          # (12, 12) one-hot
+        edge_index_na: torch.Tensor,   # nota→akord grane
+        edge_weight_na: torch.Tensor,  # nota→akord težine (α×teorija+β×statistika)
+        edge_index_aa: torch.Tensor,   # akord↔akord grane
+        edge_weight_aa: torch.Tensor,  # akord↔akord težine (kvintni krug)
     ) -> torch.Tensor:
 
-        
+        # ── Melodijski enkoder ────────────────────────────────────────────────
         ugr = self.ugradnja(melodija)             # (serija, 16, dim)
         lstm_izlaz, _ = self.lstm(ugr)
         mel_vektor = self.dropout(lstm_izlaz[:, -1, :])   # (serija, dim)
         mel_vektor = self.proj_mel(mel_vektor)    # (serija, dim)
 
-     
+        # ── Graf enkoder ──────────────────────────────────────────────────────
         h_nota = self.proj_nota(x_nota)           # (12, dim)
         h_akord = self.repr_akorada               # (N, dim)
 
         for gcn_na, gcn_aa in zip(self.gcn_nota_akord, self.gcn_akord_akord):
-            # Poruke od nota ka akordima
-            h_akord = gcn_na(h_nota, h_akord, edge_index_na)
-            # Poruke između akorada (kvintni krug)
-            h_akord = gcn_aa(h_akord, h_akord, edge_index_aa)
+            # Poruke od nota ka akordima — PONDERISANE tonalnim težinama
+            h_akord = gcn_na(h_nota, h_akord, edge_index_na, edge_weight_na)
+            # Poruke između akorada (kvintni krug) — PONDERISANE
+            h_akord = gcn_aa(h_akord, h_akord, edge_index_aa, edge_weight_aa)
 
-        # Skorovanje: skalarni proizvod melodije i svakog akorda
+        # ── Skorovanje: skalarni proizvod melodije i svakog akorda ───────────
         # mel_vektor: (serija, dim), h_akord: (N, dim)
         logiti = mel_vektor @ h_akord.T           # (serija, N)
 
         return logiti
 
 
-
 # TRENIRANJE
-
 
 def treniraj_gnn(
     trening, validacija, graf, indeksi_akorada, recnik_akorada,
@@ -218,7 +229,9 @@ def treniraj_gnn(
     # Graf tenzori
     x_nota = graf["nota"].x.to(uredjaj)
     edge_na = graf["nota", "pripada", "akord"].edge_index.to(uredjaj)
+    edge_na_w = graf["nota", "pripada", "akord"].edge_attr.to(uredjaj)
     edge_aa = graf["akord", "blizina", "akord"].edge_index.to(uredjaj)
+    edge_aa_w = graf["akord", "blizina", "akord"].edge_attr.to(uredjaj)
 
     kriterijum = nn.CrossEntropyLoss()
     optimizator = optim.Adam(model.parameters(), lr=hp["stopa_ucenja"])
@@ -238,7 +251,7 @@ def treniraj_gnn(
         for mel, cilj in trening_loader:
             mel, cilj = mel.to(uredjaj), cilj.to(uredjaj)
             optimizator.zero_grad()
-            logiti = model(mel, x_nota, edge_na, edge_aa)
+            logiti = model(mel, x_nota, edge_na, edge_na_w, edge_aa, edge_aa_w)
             gubitak = kriterijum(logiti, cilj)
             gubitak.backward()
             nn.utils.clip_grad_norm_(model.parameters(), hp["klip_gradijenta"])
@@ -253,7 +266,7 @@ def treniraj_gnn(
         with torch.no_grad():
             for mel, cilj in val_loader:
                 mel, cilj = mel.to(uredjaj), cilj.to(uredjaj)
-                logiti = model(mel, x_nota, edge_na, edge_aa)
+                logiti = model(mel, x_nota, edge_na, edge_na_w, edge_aa, edge_aa_w)
                 val_ukupno += kriterijum(logiti, cilj).item()
                 tacno += (logiti.argmax(1) == cilj).sum().item()
                 ukupno += cilj.size(0)
@@ -281,14 +294,16 @@ def evaluiraj_gnn(model, test, graf, indeksi_akorada, recnik_akorada, hp=GNN_HP)
 
     x_nota = graf["nota"].x.to(uredjaj)
     edge_na = graf["nota", "pripada", "akord"].edge_index.to(uredjaj)
+    edge_na_w = graf["nota", "pripada", "akord"].edge_attr.to(uredjaj)
     edge_aa = graf["akord", "blizina", "akord"].edge_index.to(uredjaj)
+    edge_aa_w = graf["akord", "blizina", "akord"].edge_attr.to(uredjaj)
 
     model.eval()
     tacno_top1, tacno_top3, ukupno = 0, 0, 0
 
     for mel, cilj in test_loader:
         mel, cilj = mel.to(uredjaj), cilj.to(uredjaj)
-        logiti = model(mel, x_nota, edge_na, edge_aa)
+        logiti = model(mel, x_nota, edge_na, edge_na_w, edge_aa, edge_aa_w)
         tacno_top1 += (logiti.argmax(1) == cilj).sum().item()
         _, top3 = logiti.topk(k=min(3, logiti.size(1)), dim=1)
         tacno_top3 += (top3 == cilj.unsqueeze(1)).any(1).sum().item()
