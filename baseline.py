@@ -1,5 +1,5 @@
 """
-baseline.py faza 2 LSTM Baseline Model (Eksperiment E1)
+baseline.py - faza 2: LSTM Baseline Model (Eksperiment E1)
 Opis: PyTorch LSTM arhitektura koja predviđa akorde iz melodijskog niza
       pitch klasa. Obuhvata DataLoader, petlju za treniranje i evaluaciju.
 """
@@ -16,6 +16,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
 
+# KONSTANTE I PODRAZUMEVANE VREDNOSTI
 
 PUTANJA_OBRADENIH = Path("podaci/obradeni")
 PUTANJA_MODELA = Path("modeli")
@@ -37,7 +38,7 @@ PODRAZUMEVANI_HP = {
 
 
 
-# skup podataka (PyTorch Dataset)
+# SKUP PODATAKA (PyTorch Dataset)
 
 
 class MelodijaAkordDataset(Dataset):
@@ -101,8 +102,7 @@ def napravi_loader(
     return DataLoader(skup, batch_size=velicina_serije, shuffle=mesati)
 
 
-
-# Lstm otprilike 
+# LSTM ARHITEKTURA
 
 
 class LSTMPredvidjanjAkorda(nn.Module):
@@ -274,6 +274,7 @@ def treniraj_model(
     recnik_akorada: dict[str, int],
     hp: dict = PODRAZUMEVANI_HP,
     sacuvati_model: bool = True,
+    naziv: str = "lstm_baseline_najbolji",
 ) -> LSTMPredvidjanjAkorda:
     """
     Kompletna petlja treniranja za E1 LSTM Baseline.
@@ -291,7 +292,7 @@ def treniraj_model(
     uredjaj = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[INFO] Koristi se uređaj: {uredjaj}")
 
-    # loaderi 
+    # ── Loaderi ──────────────────────────────────────────────────────────────
     trening_loader = napravi_loader(
         trening,
         hp["velicina_prozora"],
@@ -305,7 +306,7 @@ def treniraj_model(
         mesati=False,
     )
 
-    # Model :)
+    # ── Model ─────────────────────────────────────────────────────────────────
     broj_akorda = len(recnik_akorada)
     model = LSTMPredvidjanjAkorda(
         broj_akorda=broj_akorda,
@@ -318,7 +319,7 @@ def treniraj_model(
     ukupno_parametara = sum(p.numel() for p in model.parameters())
     print(f"[INFO] Ukupno parametara modela: {ukupno_parametara:,}")
 
-    # Optimizator i gubitak 
+    # ── Optimizator i gubitak ─────────────────────────────────────────────────
     # Weighted CrossEntropy: težina 0 za NEPOZNAT_AKORD klasu (indeks 0)
     tezine_klasa = torch.ones(broj_akorda, device=uredjaj)
     tezine_klasa[0] = 0.0  # NEPOZNAT_AKORD ne penalizujemo
@@ -326,14 +327,14 @@ def treniraj_model(
     kriterijum = nn.CrossEntropyLoss(weight=tezine_klasa)
     optimizator = optim.Adam(model.parameters(), lr=hp["stopa_ucenja"])
 
-    # Raspored stope učenja 
+    # ── Raspored stope učenja ─────────────────────────────────────────────────
     rasporedivac = optim.lr_scheduler.ReduceLROnPlateau(
         optimizator, mode="min", patience=3, factor=0.5
     )
 
-    # Petlja treniranja 
+    # ── Petlja treniranja ─────────────────────────────────────────────────────
     PUTANJA_MODELA.mkdir(parents=True, exist_ok=True)
-    putanja_checkpointa = PUTANJA_MODELA / "lstm_baseline_najbolji.pt"
+    putanja_checkpointa = PUTANJA_MODELA / f"{naziv}.pt"
 
     najbolja_val_tacnost = 0.0
     istorija: list[dict] = []
@@ -363,18 +364,19 @@ def treniraj_model(
             "val_tacnost": val_tacnost,
         })
 
-        # Čuvam checkpoint najboljeg modela
-        if sacuvati_model and val_tacnost > najbolja_val_tacnost:
+        # Čuvamo checkpoint najboljeg modela
+        if val_tacnost > najbolja_val_tacnost:
             najbolja_val_tacnost = val_tacnost
-            torch.save({
-                "epoha": epoha,
-                "stanje_modela": model.state_dict(),
-                "stanje_optimizatora": optimizator.state_dict(),
-                "val_tacnost": val_tacnost,
-                "recnik_akorada": recnik_akorada,
-                "hp": hp,
-            }, putanja_checkpointa)
-            print(f"  → Checkpoint sačuvan (val tačnost: {val_tacnost:.2%})")
+            if sacuvati_model:
+                torch.save({
+                    "epoha": epoha,
+                    "stanje_modela": model.state_dict(),
+                    "stanje_optimizatora": optimizator.state_dict(),
+                    "val_tacnost": val_tacnost,
+                    "recnik_akorada": recnik_akorada,
+                    "hp": hp,
+                }, putanja_checkpointa)
+                print(f"  → Checkpoint sačuvan (val tačnost: {val_tacnost:.2%})")
 
     print("─" * 60)
     print(f"[INFO] Treniranje završeno. Najbolja val. tačnost: {najbolja_val_tacnost:.2%}")
@@ -383,7 +385,7 @@ def treniraj_model(
 
 
 
-# evaluacija na test skupu
+# EVALUACIJA NA TEST SKUPU
 
 
 def evaluiraj_na_test_skupu(
@@ -439,7 +441,7 @@ def evaluiraj_na_test_skupu(
     }
 
     print("\n" + "═" * 40)
-    print("  REZULTATI NA TEST SKUPU (E1 - LSTM Baseline)")
+    print("  REZULTATI NA TEST SKUPU (E1 — LSTM Baseline)")
     print("═" * 40)
     print(f"  Chord Accuracy (CA) : {chord_accuracy:.2%}")
     print(f"  Top-3 Accuracy      : {top3_accuracy:.2%}")
@@ -450,7 +452,7 @@ def evaluiraj_na_test_skupu(
 
 
 
-# pokretanje
+# POKRETANJE
 
 
 if __name__ == "__main__":

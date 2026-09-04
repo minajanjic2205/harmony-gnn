@@ -66,7 +66,8 @@ def pokreni_visestruko_lstm(trening, validacija, test, recnik_akorada, seedovi=S
 
         model = treniraj_model(
             trening, validacija, recnik_akorada,
-            sacuvati_model=False,  # ne trebaju nam svi checkpointi, samo rezultati
+            sacuvati_model=True,  # čuvamo svaki model radi analize kvaliteta grešaka
+            naziv=f"lstm_MULTI_seed{seed}",
         )
 
         rezultati = evaluiraj_na_test_skupu(model, test, recnik_akorada)
@@ -125,7 +126,6 @@ def prikazi_rezultate(ca_rezultati: list[float], top3_rezultati: list[float], se
         json.dump(rezultat_finalni, f, indent=2)
 
     print(f"\n[INFO] Rezultati sačuvani u: rezultati/lstm_visestruko.json")
-
 
 
 # POKRETANJE

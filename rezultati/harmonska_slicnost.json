@@ -1,0 +1,28 @@
+{
+  "lstm": {
+    "model": "LSTM Baseline (E1)",
+    "ukupno": 3721,
+    "tacno": 3363,
+    "chord_accuracy": 0.9037893039505509,
+    "prosek_distanca_sve": 0.17226552002149959,
+    "prosek_distanca_greske": 1.7905027932960893,
+    "raspodela_gresaka": {
+      "2": 243,
+      "1": 95,
+      "3": 20
+    }
+  },
+  "gnn": {
+    "model": "GNN (alfa=0.5)",
+    "ukupno": 3721,
+    "tacno": 3357,
+    "chord_accuracy": 0.902176834184359,
+    "prosek_distanca_sve": 0.17011556033324376,
+    "prosek_distanca_greske": 1.739010989010989,
+    "raspodela_gresaka": {
+      "2": 243,
+      "1": 108,
+      "3": 13
+    }
+  }
+}
