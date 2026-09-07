@@ -15,14 +15,15 @@ from collections import Counter
 from typing import Optional
 
 import music21
-from music21 import corpus, converter, note, chord, stream
+from music21 import corpus, converter, note, chord, stream, harmony
+
+from config import PUTANJA_OBRADENIH, AKTIVNI_DATASET, PUTANJA_OPENEWLD_SIROVI
 
 
 # konstanty
 
 
 PUTANJA_PODATAKA = Path("podaci/nottingham")
-PUTANJA_OBRADENIH = Path("podaci/obradeni")
 URL_NOTTINGHAM = (
     "https://raw.githubusercontent.com/jukedeck/nottingham-dataset"
     "/master/ABC/"
@@ -31,7 +32,12 @@ URL_NOTTINGHAM = (
 # Sve 12 hromatskih nota (pitch klase 0–11)
 SVE_NOTE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
-# Standardni akordi (dur + mol za svih 12 tonaliteta)
+# Standardni akordi (dur + mol za svih 12 tonaliteta).
+# NAPOMENA: za Nottingham ostaje isključivo dur/mol, radi kompatibilnosti
+# sa već istreniranim LSTM/GNN checkpointima (menjanje ovog rečnika bi
+# pomerilo indekse svih akorda i pokvarilo postojeće modele). Umanjeni i
+# uvećani akordi se prepoznaju za SVAKI dataset OSIM Nottingham-a
+# (trenutno: OpenEWLD), vidi akord_u_oznaku() ispod.
 SVE_VRSTE_AKORADA = ["major", "minor"]
 RECNIK_AKORADA: dict[str, int] = {}  # popunjava se tokom obrade
 
@@ -54,16 +60,46 @@ def pitch_u_klasu(visina_tona: str) -> int:
 
 def akord_u_oznaku(m21_akord: chord.Chord) -> str:
     """
-    Pretvara music21 akord objekat u string oznaku oblika 'Cmaj' / 'Am'.
-    Pokriva dur i mol trijade. Ostale vrste vraća kao '<NEPOZNAT>'.
+    Pretvara music21 akord objekat u string oznaku oblika 'Cmaj' / 'Amin'.
+
+    VAŽNO — normalizacija enharmonskih zapisa (SAMO za dataset koji NIJE
+    Nottingham): koren akorda se uzima preko .root().pitchClass (broj
+    0-11), NE preko .root().name (string). Razlog: music21 čuva zapis
+    note onako kako je napisan u izvornoj partituri (npr. 'A#' u jednoj
+    pesmi, 'B-' u drugoj, iako je zvuk identičan). Kad bismo koristili
+    .name direktno, isti stvarni akord bi u rečniku završio kao DVA
+    različita unosa (npr. 'A#dim' i 'B-dim'), veštački udvostručavajući
+    rečnik akorada. Preko pitchClass + fiksne liste SVE_NOTE, svaki
+    akord uvek dobija JEDAN, dosledan naziv (uvek preko oštrih
+    predznaka), bez obzira na to kako je originalno zapisan.
+
+    Za Nottingham ostaje STARO ponašanje (ime direktno preko .name, bez
+    normalizacije) — namerno, radi kompatibilnosti sa već istreniranim
+    LSTM/GNN checkpointima. Normalizacija preko pitchClass bi promenila
+    imena nekih postojećih akorada (npr. 'B-maj' -> 'A#maj'), što bi
+    pomerilo indekse u rečniku i pokvarilo postojeće modele, iako bi
+    ukupan broj akorada ostao isti.
+
+    Za svaki drugi dataset (trenutno: OpenEWLD): dodatno pokriva umanjenu
+    i uvećanu trijadu — ovo je isti princip svođenja složenih akorda
+    (npr. septakorda, akorda sa dodacima) na osnovnu trijadu preko
+    music21 .quality svojstva, analogno "48-tip" standardu iz literature
+    (Yeh i dr. 2021).
     """
     try:
-        koren = m21_akord.root().name  # npr. 'C', 'F#'
+        if AKTIVNI_DATASET == "nottingham":
+            koren = m21_akord.root().name  # staro ponasanje, bez normalizacije
+        else:
+            koren = SVE_NOTE[m21_akord.root().pitchClass]  # normalizovano ime
         kvalitet = m21_akord.quality   # 'major', 'minor', 'diminished', ...
         if kvalitet == "major":
             return f"{koren}maj"
         elif kvalitet == "minor":
             return f"{koren}min"
+        elif AKTIVNI_DATASET != "nottingham" and kvalitet == "diminished":
+            return f"{koren}dim"
+        elif AKTIVNI_DATASET != "nottingham" and kvalitet == "augmented":
+            return f"{koren}aug"
         else:
             return NEPOZNAT_AKORD
     except Exception:
@@ -212,6 +248,98 @@ def ucitaj_abc_iz_direktorijuma(putanja_dir: Path) -> list[dict]:
                 rezultat["id"] = f"{fajl.stem}_{j}"
                 rezultat["naziv"] = fajl.name
                 pesme.append(rezultat)
+
+    print(f"[INFO] Uspešno parsovano {len(pesme)} pesama.")
+    return pesme
+
+
+
+# parsovanje musicxml fajlova (openewld)
+
+
+def parsiraj_musicxml_pesmu(putanja_xml: Path) -> Optional[dict]:
+    """
+    Parsuje jednu pesmu iz MusicXML/.mxl fajla (OpenEWLD format).
+
+    Za razliku od ABC-a, MusicXML razdvaja melodijske note (note.Note) i
+    harmonijske oznake (harmony.ChordSymbol) kao POSEBNE objekte u
+    stream-u — nema potrebe da se pogađa "koja nota je melodija" iz
+    akorda, kao kod Nottingham ABC parsera. Umesto toga, pratimo
+    "trenutni akord": svaki put kad naiđemo na ChordSymbol, ažuriramo
+    trenutni akord; svaka sledeća nota dobija taj akord sve dok se ne
+    pojavi novi ChordSymbol.
+
+    Vraća rečnik u ISTOM formatu kao parsiraj_abc_pesmu():
+      - 'melodija_pitch_klase': lista (pitch_klasa, trajanje_u_cetvrtinama)
+      - 'akordi_tekst': lista string oznaka akorada po poziciji nota
+    Vraća None ako parsovanje ne uspe ili pesma nema nijednu notu.
+    """
+    try:
+        partitura = converter.parse(str(putanja_xml))
+    except Exception:
+        return None
+
+    melodija_pitch_klase = []
+    akordi_tekst = []
+    trenutni_akord = NEPOZNAT_AKORD
+
+    # Uzimamo samo prvi part — lead sheet obično ima samo jedan
+    # (melodija + harmonijske oznake), za razliku od pune klavirske
+    # partiture sa više glasova.
+    for deo in partitura.parts:
+        for element in deo.flatten().notesAndRests:
+            if isinstance(element, harmony.ChordSymbol):
+                trenutni_akord = akord_u_oznaku(element)
+
+            elif isinstance(element, note.Note):
+                trajanje = float(element.duration.quarterLength)
+                pk = element.pitch.midi % 12
+                melodija_pitch_klase.append((pk, trajanje))
+                akordi_tekst.append(trenutni_akord)
+
+            elif isinstance(element, chord.Chord):
+                # Retko u lead sheet melodiji, ali za svaki slučaj:
+                # uzimamo najvišu notu, isto kao kod ABC parsera.
+                trajanje = float(element.duration.quarterLength)
+                visine = element.sortAscending().pitches
+                if visine:
+                    pk = visine[-1].midi % 12
+                    melodija_pitch_klase.append((pk, trajanje))
+                    akordi_tekst.append(trenutni_akord)
+
+            elif isinstance(element, note.Rest):
+                trajanje = float(element.duration.quarterLength)
+                melodija_pitch_klase.append((-1, trajanje))
+                akordi_tekst.append(NEPOZNAT_AKORD)
+
+        break  # samo prvi part
+
+    if not melodija_pitch_klase:
+        return None
+
+    return {
+        "melodija_pitch_klase": melodija_pitch_klase,
+        "akordi_tekst": akordi_tekst,
+    }
+
+
+def ucitaj_musicxml_iz_direktorijuma(putanja_dir: Path) -> list[dict]:
+    """
+    Učitava sve OpenEWLD pesme iz direktorijuma (rekurzivno, jer su
+    organizovane u podfolderima po autoru/kompozitoru).
+    Traži i .xml i .mxl fajlove (.mxl je kompresovan MusicXML — music21
+    ume da ga otvori direktno, bez ručnog otpakivanja).
+    """
+    xml_fajlovi = list(putanja_dir.glob("**/*.xml")) + list(putanja_dir.glob("**/*.mxl"))
+    print(f"[INFO] Pronađeno {len(xml_fajlovi)} MusicXML fajlova u {putanja_dir}")
+
+    pesme = []
+    for fajl in xml_fajlovi:
+        rezultat = parsiraj_musicxml_pesmu(fajl)
+        if rezultat:
+            rezultat["id"] = fajl.stem
+            rezultat["naziv"] = fajl.name
+            pesme.append(rezultat)
 
     print(f"[INFO] Uspešno parsovano {len(pesme)} pesama.")
     return pesme
@@ -367,16 +495,20 @@ def ucitaj_obradene_podatke(
 
 def pripremi_skup_podataka(
     lokalni_abc_dir: Optional[Path] = None,
+    lokalni_openewld_dir: Optional[Path] = None,
     forsirati_ponovnu_obradu: bool = False,
 ) -> tuple[list[dict], list[dict], list[dict], dict[str, int]]:
     """
     Glavna ulazna tačka za Fazu 1.
     1. Pokušava da učita već obrađene podatke (keš).
-    2. Ako ne postoje ili je forsirana ponovna obrada, učitava iz izvora.
+    2. Ako ne postoje ili je forsirana ponovna obrada, učitava iz izvora
+       (Nottingham ABC ili OpenEWLD MusicXML, u zavisnosti od
+       AKTIVNI_DATASET iz config.py).
     3. Enkoduje akorde, deli skup i čuva na disk.
 
     Parametri:
-        lokalni_abc_dir: putanja do lokalnih ABC fajlova (opcionalno)
+        lokalni_abc_dir: putanja do lokalnih ABC fajlova (za Nottingham)
+        lokalni_openewld_dir: putanja do lokalnih MusicXML fajlova (za OpenEWLD)
         forsirati_ponovnu_obradu: ako True, ignoriše keš
 
     Vraća:
@@ -388,8 +520,15 @@ def pripremi_skup_podataka(
         print("[INFO] Pronađen keš obrađenih podataka. Učitavam...")
         return ucitaj_obradene_podatke()
 
-    # Izvor podataka
-    if lokalni_abc_dir and lokalni_abc_dir.exists():
+    # Izvor podataka — biramo prema AKTIVNI_DATASET
+    if AKTIVNI_DATASET == "openewld":
+        if not (lokalni_openewld_dir and lokalni_openewld_dir.exists()):
+            raise RuntimeError(
+                "[GREŠKA] AKTIVNI_DATASET je 'openewld', ali "
+                "lokalni_openewld_dir nije prosleđen ili ne postoji."
+            )
+        pesme = ucitaj_musicxml_iz_direktorijuma(lokalni_openewld_dir)
+    elif lokalni_abc_dir and lokalni_abc_dir.exists():
         pesme = ucitaj_abc_iz_direktorijuma(lokalni_abc_dir)
     else:
         pesme = ucitaj_nottingham_iz_music21()
@@ -420,6 +559,7 @@ def pripremi_skup_podataka(
 if __name__ == "__main__":
     trening, validacija, test, recnik = pripremi_skup_podataka(
         lokalni_abc_dir=Path("podaci/nottingham/ABC"),
+        lokalni_openewld_dir=PUTANJA_OPENEWLD_SIROVI,
         forsirati_ponovnu_obradu=True,
     )
 

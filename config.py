@@ -7,14 +7,26 @@ Opis: Sve vrednosti koje se mogu menjati su ovde — ne treba dirati ostale fajl
 from pathlib import Path
 
 
+# AKTIVNI DATASET
+
+
+# Menjaj ovde kad prebacuješ između datasetova: "nottingham" ili "openewld".
+# SVE putanje ispod (podaci, modeli, rezultati) automatski se granaju
+# prema ovoj vrednosti, tako da se rezultati različitih dataseta NIKAD ne
+# mešaju niti jedan prepisuje drugi u istom folderu.
+AKTIVNI_DATASET = "openewld"
+
+
 # PUTANJE
 
 
-PUTANJA_ABC         = Path("podaci/nottingham/ABC")
-PUTANJA_OBRADENIH   = Path("podaci/obradeni")
-PUTANJA_GRAFA       = Path("podaci/graf")
-PUTANJA_MODELA      = Path("modeli")
-PUTANJA_REZULTATA   = Path("rezultati")
+PUTANJA_ABC             = Path("podaci/nottingham/ABC")   # sirovi ABC fajlovi, samo za Nottingham
+PUTANJA_OPENEWLD_SIROVI = Path("podaci/openewld/sirovi")  # sirovi .mxl fajlovi, samo za OpenEWLD
+
+PUTANJA_OBRADENIH   = Path(f"podaci/{AKTIVNI_DATASET}/obradeni")
+PUTANJA_GRAFA       = Path(f"podaci/{AKTIVNI_DATASET}/graf")
+PUTANJA_MODELA      = Path(f"modeli/{AKTIVNI_DATASET}")
+PUTANJA_REZULTATA   = Path(f"rezultati/{AKTIVNI_DATASET}")
 
 
 # PREPROCESIRANJE

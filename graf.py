@@ -14,12 +14,11 @@ from typing import Optional
 import torch
 from torch_geometric.data import HeteroData
 
+from config import PUTANJA_OBRADENIH, PUTANJA_GRAFA
+
 
 # KONSTANTE
 
-
-PUTANJA_OBRADENIH = Path("podaci/obradeni")
-PUTANJA_GRAFA = Path("podaci/graf")
 
 # 12 hromatskih nota (pitch klase 0–11)
 NAZIVI_NOTA = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -32,8 +31,14 @@ KVINTNI_KRUG = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5]
 # Trijade — koje note čine svaki tip akorda
 # Durska trijada: osnovna, terca (4 polustepena), kvinta (7 polustepena)
 # Molska trijada: osnovna, terca (3 polustepena), kvinta (7 polustepena)
+# Umanjena trijada: osnovna, mala terca (3), umanjena kvinta (6) — koristi se
+# samo kad je AKTIVNI_DATASET == "hlsd" (dataset.py ograničava generisanje
+# "dim"/"aug" naziva na HLSD, pa ove grane ostaju neaktivne za Nottingham).
+# Uvećana trijada: osnovna, velika terca (4), uvećana kvinta (8).
 INTERVALI_DUR = [0, 4, 7]
 INTERVALI_MOL = [0, 3, 7]
+INTERVALI_DIM = [0, 3, 6]
+INTERVALI_AUG = [0, 4, 8]
 
 
 
@@ -42,7 +47,7 @@ INTERVALI_MOL = [0, 3, 7]
 
 def naziv_u_koren_i_kvalitet(naziv_akorda: str) -> Optional[tuple[int, str]]:
     """
-    Parsuje naziv akorda (npr. 'Dmaj', 'F#min', 'B-maj') u
+    Parsuje naziv akorda (npr. 'Dmaj', 'F#min', 'B-maj', 'Cdim', 'Gaug') u
     (pitch_klasa_korena, kvalitet).
     Vraća None ako naziv nije prepoznat.
     """
@@ -59,12 +64,18 @@ def naziv_u_koren_i_kvalitet(naziv_akorda: str) -> Optional[tuple[int, str]]:
 
     naziv = naziv_akorda.strip()
 
-    # Određujemo sufiks (maj/min)
+    # Određujemo sufiks (maj/min/dim/aug)
     if naziv.endswith("maj"):
         kvalitet = "maj"
         koren_str = naziv[:-3]
     elif naziv.endswith("min"):
         kvalitet = "min"
+        koren_str = naziv[:-3]
+    elif naziv.endswith("dim"):
+        kvalitet = "dim"
+        koren_str = naziv[:-3]
+    elif naziv.endswith("aug"):
+        kvalitet = "aug"
         koren_str = naziv[:-3]
     else:
         return None
@@ -80,14 +91,20 @@ def naziv_u_koren_i_kvalitet(naziv_akorda: str) -> Optional[tuple[int, str]]:
 def note_u_akordu(naziv_akorda: str) -> list[int]:
     """
     Vraća listu pitch klasa nota koje čine zadati akord.
-    Npr. 'Cmaj' → [0, 4, 7], 'Amin' → [9, 0, 4]
+    Npr. 'Cmaj' → [0, 4, 7], 'Amin' → [9, 0, 4], 'Cdim' → [0, 3, 6], 'Caug' → [0, 4, 8]
     """
     rezultat = naziv_u_koren_i_kvalitet(naziv_akorda)
     if rezultat is None:
         return []
 
     koren, kvalitet = rezultat
-    intervali = INTERVALI_DUR if kvalitet == "maj" else INTERVALI_MOL
+    mapa_intervala = {
+        "maj": INTERVALI_DUR,
+        "min": INTERVALI_MOL,
+        "dim": INTERVALI_DIM,
+        "aug": INTERVALI_AUG,
+    }
+    intervali = mapa_intervala[kvalitet]
     return [(koren + interval) % 12 for interval in intervali]
 
 

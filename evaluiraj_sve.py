@@ -40,12 +40,17 @@ for alfa in VREDNOSTI_ALFA:
         print(f"[PRESKAČEM] Graf za α={alfa:.2f} nije pronađen.")
         continue
 
-    graf = torch.load(putanja_grafa, weights_only=False)
+    graf = torch.load(putanja_grafa, weights_only=False, map_location="cpu")
 
     # Učitavamo model
-    checkpoint = torch.load(putanja, weights_only=False)
+    checkpoint = torch.load(putanja, weights_only=False, map_location="cpu")
     model = GNNPredvidjanjAkorda(len(indeksi_akorada))
-    model.load_state_dict(checkpoint["stanje"])
+    try:
+        model.load_state_dict(checkpoint["stanje"])
+    except RuntimeError as e:
+        print(f"[PRESKAČEM] α={alfa:.2f} — checkpoint ima nekompatibilne dimenzije "
+              f"(verovatno star fajl sa drugačijim skrivene_dimenzije podešavanjem)")
+        continue
     model.eval()
 
     # Evaluacija
@@ -59,26 +64,31 @@ for alfa in VREDNOSTI_ALFA:
         "top3_accuracy": metrike["top3_accuracy"],
     })
 
-# Štampamo tabelu
-print("\n" + "═" * 55)
-print(f"  {'Alfa':>6}  {'Beta':>6}  {'Chord Accuracy':>16}  {'Top-3':>8}")
-print("─" * 55)
+if not rezultati:
+    print("\n[UPOZORENJE] Nijedan model nije uspešno evaluiran — "
+          "verovatno svi dostupni checkpointi imaju nekompatibilne dimenzije "
+          "sa trenutnim config.py podešavanjem, ili fajlovi ne postoje.")
+else:
+    # Štampamo tabelu
+    print("\n" + "═" * 55)
+    print(f"  {'Alfa':>6}  {'Beta':>6}  {'Chord Accuracy':>16}  {'Top-3':>8}")
+    print("─" * 55)
 
-lstm_ca = 0.9019
-najbolji = max(rezultati, key=lambda r: r["chord_accuracy"])
+    lstm_ca = 0.9019
+    najbolji = max(rezultati, key=lambda r: r["chord_accuracy"])
 
-for r in rezultati:
-    marker = " ← BEST" if r["alfa"] == najbolji["alfa"] else ""
-    print(f"  {r['alfa']:>6.2f}  {r['beta']:>6.2f}  "
-          f"{r['chord_accuracy']:>15.2%}  {r['top3_accuracy']:>7.2%}{marker}")
+    for r in rezultati:
+        marker = " ← BEST" if r["alfa"] == najbolji["alfa"] else ""
+        print(f"  {r['alfa']:>6.2f}  {r['beta']:>6.2f}  "
+              f"{r['chord_accuracy']:>15.2%}  {r['top3_accuracy']:>7.2%}{marker}")
 
-print("═" * 55)
-print(f"\n  Optimalna alfa : {najbolji['alfa']:.2f}")
-print(f"  Chord Accuracy : {najbolji['chord_accuracy']:.2%}")
-print(f"  LSTM Baseline  : {lstm_ca:.2%}")
-print(f"  Poboljšanje    : {(najbolji['chord_accuracy'] - lstm_ca):+.2%}")
+    print("═" * 55)
+    print(f"\n  Optimalna alfa : {najbolji['alfa']:.2f}")
+    print(f"  Chord Accuracy : {najbolji['chord_accuracy']:.2%}")
+    print(f"  LSTM Baseline  : {lstm_ca:.2%}")
+    print(f"  Poboljšanje    : {(najbolji['chord_accuracy'] - lstm_ca):+.2%}")
 
-# Čuvamo JSON
-with open(PUTANJA_REZULTATA / "grid_search_rezultati.json", "w") as f:
-    json.dump(rezultati, f, indent=2)
-print(f"\n[INFO] Rezultati sačuvani u rezultati/grid_search_rezultati.json")
+    # Čuvamo JSON
+    with open(PUTANJA_REZULTATA / "grid_search_rezultati.json", "w") as f:
+        json.dump(rezultati, f, indent=2)
+    print(f"\n[INFO] Rezultati sačuvani u rezultati/grid_search_rezultati.json")

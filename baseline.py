@@ -15,11 +15,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
+from config import PUTANJA_OBRADENIH, PUTANJA_MODELA
+
 
 # KONSTANTE I PODRAZUMEVANE VREDNOSTI
-
-PUTANJA_OBRADENIH = Path("podaci/obradeni")
-PUTANJA_MODELA = Path("modeli")
 
 # Pitch klase: 0–11 + 12 za pauzu (-1 se mapira na 12)
 BROJ_PITCH_KLASA = 13  # 0–11 note + 12 = pauza

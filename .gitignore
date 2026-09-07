@@ -1,0 +1,6 @@
+podaci/*/sirovi/
+podaci/*/obradeni/
+podaci/*/graf/
+modeli/
+rezultati/*/*.png
+rezultati/*/*.json
