@@ -232,7 +232,7 @@ def ucitaj_abc_iz_direktorijuma(putanja_dir: Path) -> list[dict]:
     Alternativno: učitava sve .abc fajlove iz lokalnog direktorijuma.
     Korisno ako je Nottingham dataset ručno preuzet.
     """
-    abc_fajlovi = list(putanja_dir.glob("**/*.abc"))
+    abc_fajlovi = sorted(putanja_dir.glob("**/*.abc"))
     print(f"[INFO] Pronađeno {len(abc_fajlovi)} ABC fajlova u {putanja_dir}")
 
     pesme = []
@@ -330,7 +330,7 @@ def ucitaj_musicxml_iz_direktorijuma(putanja_dir: Path) -> list[dict]:
     Traži i .xml i .mxl fajlove (.mxl je kompresovan MusicXML — music21
     ume da ga otvori direktno, bez ručnog otpakivanja).
     """
-    xml_fajlovi = list(putanja_dir.glob("**/*.xml")) + list(putanja_dir.glob("**/*.mxl"))
+    xml_fajlovi = sorted(putanja_dir.glob("**/*.xml")) + sorted(putanja_dir.glob("**/*.mxl"))
     print(f"[INFO] Pronađeno {len(xml_fajlovi)} MusicXML fajlova u {putanja_dir}")
 
     pesme = []
