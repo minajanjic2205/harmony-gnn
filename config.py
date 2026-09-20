@@ -14,7 +14,14 @@ from pathlib import Path
 # SVE putanje ispod (podaci, modeli, rezultati) automatski se granaju
 # prema ovoj vrednosti, tako da se rezultati različitih dataseta NIKAD ne
 # mešaju niti jedan prepisuje drugi u istom folderu.
-AKTIVNI_DATASET = "openewld"
+AKTIVNI_DATASET = "nottingham"
+
+# Koji nivo pojednostavljivanja rečnika akorada koristimo:
+#   "osnovno"    — Faza 1: dur/mol (+umanjeni/uvećani za ne-Nottingham) trijade
+#   "septakordi" — Faza 2: dodaje dominant7/major7/minor7, vidi akord_u_oznaku()
+# Menjanje ove vrednosti NE prepisuje rezultate druge faze — svaka ima
+# svoj odvojen podfolder, da bi mogle da se porede jedna naspram druge.
+PROSIRENJE_AKORADA = "osnovno"
 
 
 # PUTANJE
@@ -23,10 +30,10 @@ AKTIVNI_DATASET = "openewld"
 PUTANJA_ABC             = Path("podaci/nottingham/ABC")   # sirovi ABC fajlovi, samo za Nottingham
 PUTANJA_OPENEWLD_SIROVI = Path("podaci/openewld/sirovi")  # sirovi .mxl fajlovi, samo za OpenEWLD
 
-PUTANJA_OBRADENIH   = Path(f"podaci/{AKTIVNI_DATASET}/obradeni")
-PUTANJA_GRAFA       = Path(f"podaci/{AKTIVNI_DATASET}/graf")
-PUTANJA_MODELA      = Path(f"modeli/{AKTIVNI_DATASET}")
-PUTANJA_REZULTATA   = Path(f"rezultati/{AKTIVNI_DATASET}")
+PUTANJA_OBRADENIH   = Path(f"podaci/{AKTIVNI_DATASET}/{PROSIRENJE_AKORADA}/obradeni")
+PUTANJA_GRAFA       = Path(f"podaci/{AKTIVNI_DATASET}/{PROSIRENJE_AKORADA}/graf")
+PUTANJA_MODELA      = Path(f"modeli/{AKTIVNI_DATASET}/{PROSIRENJE_AKORADA}")
+PUTANJA_REZULTATA   = Path(f"rezultati/{AKTIVNI_DATASET}/{PROSIRENJE_AKORADA}")
 
 
 # PREPROCESIRANJE

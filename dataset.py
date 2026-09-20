@@ -17,7 +17,7 @@ from typing import Optional
 import music21
 from music21 import corpus, converter, note, chord, stream, harmony
 
-from config import PUTANJA_OBRADENIH, AKTIVNI_DATASET, PUTANJA_OPENEWLD_SIROVI
+from config import PUTANJA_OBRADENIH, AKTIVNI_DATASET, PROSIRENJE_AKORADA, PUTANJA_OPENEWLD_SIROVI
 
 
 # konstanty
@@ -85,12 +85,36 @@ def akord_u_oznaku(m21_akord: chord.Chord) -> str:
     (npr. septakorda, akorda sa dodacima) na osnovnu trijadu preko
     music21 .quality svojstva, analogno "48-tip" standardu iz literature
     (Yeh i dr. 2021).
+
+    Kad je PROSIRENJE_AKORADA == "septakordi" (Faza 2): dodatno razlikuje
+    tri najčešća tipa septakorda (dominantni, veliki/major7, mali/minor7)
+    preko music21 .chordKind svojstva — OVO NIJE ISTO što i .quality:
+    .quality gleda samo osnovnu trijadu (dur/mol/umanjeno/uvećano) i NE
+    razlikuje septakorde, dok .chordKind čuva tačan tip akorda kako je
+    zapisan u MusicXML-u (npr. 'dominant-seventh', 'major-seventh').
+    Akordi sa dodacima (npr. 'C7 add 9') i dalje se svode na osnovni tip
+    septakorda (npr. 'C7'), isti princip pojednostavljivanja kao za
+    trijade. Svi ostali tipovi (dim7, m7b5, sus, itd.) i dalje padaju na
+    osnovnu trijadu preko .quality, kao u Fazi 1.
     """
     try:
         if AKTIVNI_DATASET == "nottingham":
             koren = m21_akord.root().name  # staro ponasanje, bez normalizacije
         else:
             koren = SVE_NOTE[m21_akord.root().pitchClass]  # normalizovano ime
+
+        # Faza 2: septakordi (samo za ne-Nottingham datasete)
+        if AKTIVNI_DATASET != "nottingham" and PROSIRENJE_AKORADA == "septakordi":
+            chord_kind = getattr(m21_akord, "chordKind", None)
+            if chord_kind == "dominant-seventh":
+                return f"{koren}dom7"
+            elif chord_kind == "major-seventh":
+                return f"{koren}maj7"
+            elif chord_kind == "minor-seventh":
+                return f"{koren}min7"
+            # svi ostali chordKind tipovi (dim7, m7b5, sus, add9, ...)
+            # padaju dole na osnovnu trijadu, isto kao u Fazi 1
+
         kvalitet = m21_akord.quality   # 'major', 'minor', 'diminished', ...
         if kvalitet == "major":
             return f"{koren}maj"
