@@ -39,6 +39,13 @@ INTERVALI_DUR = [0, 4, 7]
 INTERVALI_MOL = [0, 3, 7]
 INTERVALI_DIM = [0, 3, 6]
 INTERVALI_AUG = [0, 4, 8]
+# Faza 2 — septakordi (Dodati kad je PROSIRENJE_AKORADA == "septakordi").
+# Dominantni septakord: dur trijada + mala septima (10 polustepeni)
+# Veliki (major7) septakord: dur trijada + velika septima (11 polustepeni)
+# Mali (minor7) septakord: mol trijada + mala septima (10 polustepeni)
+INTERVALI_DOM7 = [0, 4, 7, 10]
+INTERVALI_MAJ7 = [0, 4, 7, 11]
+INTERVALI_MIN7 = [0, 3, 7, 10]
 
 
 
@@ -64,8 +71,19 @@ def naziv_u_koren_i_kvalitet(naziv_akorda: str) -> Optional[tuple[int, str]]:
 
     naziv = naziv_akorda.strip()
 
+    # VAZNO: proveravamo sufikse septakorda (Faza 2) PRE trijadnih sufiksa,
+    # da izbegnemo bilo kakvu dvosmislenost u redosledu provere.
+    if naziv.endswith("dom7"):
+        kvalitet = "dom7"
+        koren_str = naziv[:-4]
+    elif naziv.endswith("maj7"):
+        kvalitet = "maj7"
+        koren_str = naziv[:-4]
+    elif naziv.endswith("min7"):
+        kvalitet = "min7"
+        koren_str = naziv[:-4]
     # Određujemo sufiks (maj/min/dim/aug)
-    if naziv.endswith("maj"):
+    elif naziv.endswith("maj"):
         kvalitet = "maj"
         koren_str = naziv[:-3]
     elif naziv.endswith("min"):
@@ -92,6 +110,7 @@ def note_u_akordu(naziv_akorda: str) -> list[int]:
     """
     Vraća listu pitch klasa nota koje čine zadati akord.
     Npr. 'Cmaj' → [0, 4, 7], 'Amin' → [9, 0, 4], 'Cdim' → [0, 3, 6], 'Caug' → [0, 4, 8]
+    Faza 2: 'Cdom7' → [0, 4, 7, 10], 'Cmaj7' → [0, 4, 7, 11], 'Cmin7' → [0, 3, 7, 10]
     """
     rezultat = naziv_u_koren_i_kvalitet(naziv_akorda)
     if rezultat is None:
@@ -103,6 +122,9 @@ def note_u_akordu(naziv_akorda: str) -> list[int]:
         "min": INTERVALI_MOL,
         "dim": INTERVALI_DIM,
         "aug": INTERVALI_AUG,
+        "dom7": INTERVALI_DOM7,
+        "maj7": INTERVALI_MAJ7,
+        "min7": INTERVALI_MIN7,
     }
     intervali = mapa_intervala[kvalitet]
     return [(koren + interval) % 12 for interval in intervali]
