@@ -14,14 +14,14 @@ from pathlib import Path
 # SVE putanje ispod (podaci, modeli, rezultati) automatski se granaju
 # prema ovoj vrednosti, tako da se rezultati različitih dataseta NIKAD ne
 # mešaju niti jedan prepisuje drugi u istom folderu.
-AKTIVNI_DATASET = "nottingham"
+AKTIVNI_DATASET = "openewld"
 
 # Koji nivo pojednostavljivanja rečnika akorada koristimo:
 #   "osnovno"    — Faza 1: dur/mol (+umanjeni/uvećani za ne-Nottingham) trijade
 #   "septakordi" — Faza 2: dodaje dominant7/major7/minor7, vidi akord_u_oznaku()
 # Menjanje ove vrednosti NE prepisuje rezultate druge faze — svaka ima
 # svoj odvojen podfolder, da bi mogle da se porede jedna naspram druge.
-PROSIRENJE_AKORADA = "osnovno"
+PROSIRENJE_AKORADA = "septakordi"
 
 
 # PUTANJE
