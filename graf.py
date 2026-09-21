@@ -14,7 +14,7 @@ from typing import Optional
 import torch
 from torch_geometric.data import HeteroData
 
-from config import PUTANJA_OBRADENIH, PUTANJA_GRAFA
+from config import PUTANJA_OBRADENIH, PUTANJA_GRAFA, MAKS_KVINTNO_RASTOJANJE, PRAG_KOPOJAVE
 
 
 # KONSTANTE
@@ -182,14 +182,13 @@ def izgradi_kvintne_grane(
     """
     Tip 2: Grana između dva akorda čiji su koreni bliski na kvintnom krugu.
     Težina: w = 1 / (1 + d), gde je d broj koraka na krugu.
-    Maksimalno rastojanje za koje dodajemo granu: 3 koraka.
+    Maksimalno rastojanje za koje dodajemo granu: MAKS_KVINTNO_RASTOJANJE
+    (iz config.py).
 
     Vraća:
         lista_grana : [(indeks_akorda_a, indeks_akorda_b), ...]
         tezine      : [w, ...]
     """
-    MAX_RASTOJANJE = 3  # akordi dalje od 3 koraka nisu harmonski srodni
-
     nazivi = list(indeksi_akorada.keys())
     grane = []
     tezine = []
@@ -210,7 +209,7 @@ def izgradi_kvintne_grane(
 
             d = rastojanje_na_kvintu(pk_a, pk_b)
 
-            if d <= MAX_RASTOJANJE:
+            if d <= MAKS_KVINTNO_RASTOJANJE:
                 idx_a = indeksi_akorada[naziv_a]
                 idx_b = indeksi_akorada[naziv_b]
                 tezina = 1.0 / (1.0 + d)
@@ -407,7 +406,9 @@ def izgradi_hetero_graf(
             novi_idx = indeksi_akorada[naziv]
             ko_pojave_reindeksirane[(pk, novi_idx)] = vred
 
-    t3_grane, t3_tezine = izgradi_statisticke_grane(ko_pojave_reindeksirane)
+    t3_grane, t3_tezine = izgradi_statisticke_grane(
+        ko_pojave_reindeksirane, prag=PRAG_KOPOJAVE,
+    )
 
     #Kombinovanje Tipa 1 i Tipa 3 
     komb_grane, komb_tezine = kombinuj_tezine(
